@@ -1,0 +1,41 @@
+# Archivos compilados
+target/
+*.class
+*.jar
+*.war
+
+# Visual Studio Code
+.vscode/
+
+# Secretos y claves privadas
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+# Respaldos
+respaldo-proyecto03/
+respaldos-postgresql/
+*.dump
+*.sql
+!**/src/main/resources/db/migration/*.sql
+
+# Archivos temporales
+*.log
+.DS_Store
+
+
+# Postman local privado y resultados
+postman/*.postman_environment.local.json
+postman/*-private.json
+postman/newman-results/
+
+# kubeconfigs, credentials and local runner settings
+kubeconfig*
+*.kubeconfig
+.github-runner/
+.actions-runner/
