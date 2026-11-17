@@ -62,10 +62,10 @@ jobs:
     runs-on: [self-hosted, Windows, X64, docker-desktop]
     permissions:
       contents: read
-      packages: read
+      packages: write
     steps:
       - name: Desplegar las imágenes en Kubernetes de Docker Desktop
-        shell: pwsh
+        shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_OWNER: ${{ github.repository_owner }}
