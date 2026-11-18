@@ -79,8 +79,16 @@ $remote = "/tmp/auth-db-before-flyway-$stamp.dump"
 $local = Join-Path $DestinoBackup "auth-db-before-flyway-$stamp.dump"
 try {
     K @('-n',$ns,'exec',$pod,'--','pg_dump','-U','postgres','-d','auth_db','-Fc','-f',$remote)
-    K @('-n',$ns,'cp',"${pod}:$remote",$local)
-    if (-not (Test-Path $local) -or (Get-Item $local).Length -le 0) { throw 'Backup vacío o inexistente' }
+    # kubectl cp interpreta el ':' de D:\ como separador de Pod/ruta remota.
+    # Usar una ruta relativa desde la carpeta de backups evita ese conflicto.
+    Push-Location -LiteralPath $DestinoBackup
+    try {
+        $localFilename = Split-Path -Leaf $local
+        K @('-n',$ns,'cp',"${pod}:$remote","./$localFilename")
+    } finally {
+        Pop-Location
+    }
+    if (-not (Test-Path -LiteralPath $local) -or (Get-Item -LiteralPath $local).Length -le 0) { throw 'Backup vacío o inexistente' }
     Write-Host "Backup guardado en $local"
 } finally {
     & kubectl -n $ns exec $pod -- rm -f $remote | Out-Null
