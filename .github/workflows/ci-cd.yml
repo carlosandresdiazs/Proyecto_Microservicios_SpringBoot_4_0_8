@@ -19,12 +19,13 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
           cache: maven
       - name: Compilar y ejecutar pruebas Maven
         run: mvn -B --no-transfer-progress clean verify
       - name: Validar contratos Postman y migraciones
         run: python3 scripts/validate-project.py
+
   build-push:
     needs: verify
     if: github.event_name != 'pull_request'
@@ -41,11 +42,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Normalizar propietario GHCR a minúsculas
+      - name: Normalizar propietario GHCR
         id: meta
         shell: bash
         run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-      - name: Publicar imagen (commit SHA y main)
+      - name: Publicar imagen SHA y main
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -54,42 +55,33 @@ jobs:
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/${{ matrix.service }}:${{ github.sha }}
             ghcr.io/${{ steps.meta.outputs.owner }}/${{ matrix.service }}:main
+
   deploy-local:
-    # Este runner se instala en TU equipo con Docker Desktop + kubectl.
-    # El runner estándar de GitHub NO puede acceder a tu clúster local.
     needs: build-push
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: [self-hosted, Windows, X64, docker-desktop]
     permissions:
       contents: read
       packages: read
+    timeout-minutes: 30
     steps:
-      - name: Desplegar las imágenes en Kubernetes de Docker Desktop
+      - name: Obtener scripts de despliegue
+        uses: actions/checkout@v4
+      - name: Comprobar conectividad con Kubernetes
+        shell: pwsh
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+          if ($LASTEXITCODE -ne 0) { throw 'No hay acceso al clúster Kubernetes' }
+      - name: Actualizar imágenes GHCR en Docker Desktop Kubernetes
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_OWNER: ${{ github.repository_owner }}
           IMAGE_SHA: ${{ github.sha }}
-          GH_ACTOR: ${{ github.actor }}
+        run: ./scripts/deploy-local.ps1
+      - name: Resumen del despliegue
+        if: always()
+        shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          if ((kubectl config current-context).Trim() -ne 'docker-desktop') { throw 'El runner no está conectado a docker-desktop' }
-          $token = $env:GH_TOKEN
-          $token | docker login ghcr.io -u $env:GH_ACTOR --password-stdin
-          if ($LASTEXITCODE -ne 0) { throw 'Falló docker login' }
-          $ns = 'proyecto-03'
-          kubectl -n $ns get secret app-secrets rsa-keys keycloak-realm
-          if ($LASTEXITCODE -ne 0) { throw 'Falta configuración inicial: ejecuta scripts/k8s-setup.sh manualmente' }
-          $services = @('api-gateway','auth-service','user-service','product-service','payment-service')
-          foreach ($service in $services) {
-            $image = ('ghcr.io/{0}/{1}:{2}' -f $env:IMAGE_OWNER.ToLowerInvariant(), $service, $env:IMAGE_SHA)
-            docker pull $image
-            if ($LASTEXITCODE -ne 0) { throw "No se pudo descargar $image" }
-            kubectl -n $ns set image "deployment/$service" "app=$image"
-            if ($LASTEXITCODE -ne 0) { throw "Fallo al desplegar $service" }
-          }
-          foreach ($service in $services) {
-            kubectl -n $ns rollout status "deployment/$service" --timeout=300s
-            if ($LASTEXITCODE -ne 0) { throw "Rollout fallido $service" }
-          }
-          docker logout ghcr.io
+          kubectl -n proyecto-03 get deployments,pods -o wide
+          kubectl -n proyecto-03 get events --sort-by=.lastTimestamp --field-selector type=Warning

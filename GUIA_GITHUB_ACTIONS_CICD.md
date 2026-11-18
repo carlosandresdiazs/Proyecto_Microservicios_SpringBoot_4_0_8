@@ -2,7 +2,7 @@
 
 ## Estado del código
 
-La raíz `pom.xml` utiliza **Spring Boot 4.0.8**, Spring Cloud 2025.1.3 y Java 21; el código y la carpeta de entrega se identifican ahora como Spring Boot 4.0.8.
+La raíz `pom.xml` utiliza **Spring Boot 4.0.8**, Spring Cloud 2025.1.3 y Java 25; el código y la carpeta de entrega se identifican ahora como Spring Boot 4.0.8.
 
 Se corrigió la definición de la clave de firma RSA en `RsaKeyConfig`: ahora se construye explícitamente el JWK RS256 con `kid=proyecto03-key` para el JWT de `auth-service`. Se incorporó una prueba JUnit para generar, firmar y verificar un token. También se incorporaron migraciones Flyway `V1__initial_schema.sql` para instalaciones nuevas. **Antes de aplicarlas a PVC con datos existentes, hacer copia de respaldo.** Las tablas existentes no se eliminan, pero cualquier incompatibilidad de esquema debe resolverse antes de desplegar.
 
@@ -44,7 +44,7 @@ GitHub Actions hospedado por GitHub **no puede ver** `docker-desktop` del PC. Se
 
 ## Flujo automático
 
-- Pull request hacia `main`: Java 21 + Maven `clean verify` + validaciones del contrato Postman (sin despliegue).
+- Pull request hacia `main`: Java 25 + Maven `clean verify` + validaciones del contrato Postman (sin despliegue).
 - Push a `main`: lo anterior y construcción/publicación de cinco imágenes `ghcr.io/usuario/servicio:SHA` en GHCR.
 - Después: runner local Windows hace `docker login` con el token temporal del job, descarga imágenes por SHA, actualiza los cinco Deployments y exige `kubectl rollout status`.
 - El pipeline **no reinstala PostgreSQL ni Keycloak, no recrea credenciales ni elimina volúmenes**.

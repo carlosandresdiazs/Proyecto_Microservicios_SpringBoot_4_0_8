@@ -1,4 +1,4 @@
-# PROYECTO 03 — Spring Boot 4.0.8 / Java 21 / Spring Cloud 2025.1.3
+# PROYECTO 03 — Spring Boot 4.0.8 / Java 25 / Spring Cloud 2025.1.3
 
 # PROYECTO 03 — Despliegue EXCLUSIVO Kubernetes
 
