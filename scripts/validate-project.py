@@ -25,9 +25,20 @@ for item in requests:
     url=item['request']['url']
     if isinstance(url, dict): url=url.get('raw','')
     assert url, f'Missing URL {item["name"]}'
-for service in ['auth','user','product','payment']:
-    base=root/f'{service}-service'
-    assert (base/'src/main/resources/db/migration/V1__initial_schema.sql').is_file()
+migration_files = {
+    'auth': 'V1__create_credentials.sql',
+    'user': 'V1__initial_schema.sql',
+    'product': 'V1__initial_schema.sql',
+    'payment': 'V1__initial_schema.sql'
+}
+
+for service, filename in migration_files.items():
+    migration = (
+        root / f'{service}-service'
+        / 'src/main/resources/db/migration'
+        / filename
+    )
+    assert migration.is_file(), f'Migración faltante: {migration}'
 assert (root/'.github/workflows/ci-cd.yml').is_file()
 assert '!**/src/main/resources/db/migration/*.sql' in (root/'.gitignore').read_text(), 'Flyway migrations must be tracked by Git'
 
