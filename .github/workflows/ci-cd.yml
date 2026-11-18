@@ -63,6 +63,8 @@ jobs:
           context: .
           file: ./${{ matrix.service }}/Dockerfile
           push: true
+          progress: plain
+          no-cache: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/${{ matrix.service }}:${{ github.sha }}
             ghcr.io/${{ steps.meta.outputs.owner }}/${{ matrix.service }}:main
