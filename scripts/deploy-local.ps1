@@ -20,6 +20,8 @@ function Show-Diagnostics {
     & kubectl -n $namespace get deployment $Service -o wide
     & kubectl -n $namespace describe deployment $Service
     & kubectl -n $namespace get pods -l "app=$Service" -o wide
+    & kubectl -n $namespace get endpoints auth-db users-db products-db payments-db
+    & kubectl -n $namespace describe pods -l "app=$Service"
     & kubectl -n $namespace get events --sort-by=.lastTimestamp --field-selector type=Warning
 
     # Logs de pods actuales (incluye pods no Ready); las fallas de arranque
@@ -58,6 +60,15 @@ foreach ($secret in @('app-secrets', 'rsa-keys', 'keycloak-realm')) {
 foreach ($service in $services) {
     Invoke-Kubectl @('-n', $namespace, 'get', 'deployment', $service, '-o', 'name')
 }
+# No avanzar si PostgreSQL no esta listo; el rollout no corrige problemas de DB.
+foreach ($db in @('auth-db','users-db','products-db','payments-db')) {
+    Invoke-Kubectl @('-n', $namespace, 'rollout', 'status', "deployment/$db", '--timeout=180s')
+}
+# Comprobar metadatos reales Flyway contra las migraciones incluidas en este commit.
+$flywayCheck = Join-Path $PSScriptRoot 'check-flyway-history.ps1'
+if (-not (Test-Path -LiteralPath $flywayCheck)) { throw 'Falta scripts/check-flyway-history.ps1' }
+& $flywayCheck
+if (-not $?) { throw 'Preflight Flyway fallido.' }
 
 # Las imágenes privadas requieren un imagePullSecret ya vinculado al Pod o
 # a su ServiceAccount. No creamos ni imprimimos tokens desde Actions.
@@ -108,4 +119,3 @@ try {
     }
     throw $reason
 }
-

@@ -63,8 +63,6 @@ jobs:
           context: .
           file: ./${{ matrix.service }}/Dockerfile
           push: true
-          progress: plain
-          no-cache: true
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/${{ matrix.service }}:${{ github.sha }}
             ghcr.io/${{ steps.meta.outputs.owner }}/${{ matrix.service }}:main
@@ -90,6 +88,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'El runner no tiene acceso al clúster' }
           kubectl -n proyecto-03 get deployment
           if ($LASTEXITCODE -ne 0) { throw 'Faltan los Deployments; ejecute primero k8s-setup.sh' }
+      - name: Verificar integridad de Flyway antes del despliegue
+        shell: pwsh
+        run: ./scripts/check-flyway-history.ps1
       - name: Actualizar imágenes GHCR
         shell: pwsh
         env:
