@@ -106,4 +106,3 @@ jobs:
         run: |
           kubectl -n proyecto-03 get deployments,pods -o wide
           kubectl -n proyecto-03 get events --sort-by=.lastTimestamp --field-selector type=Warning
-
