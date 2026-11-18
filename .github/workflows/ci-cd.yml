@@ -1,16 +1,19 @@
 name: CI/CD - Microservicios Kubernetes
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+
 permissions:
   contents: read
-  packages: write
+
 concurrency:
   group: deployment-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -21,32 +24,40 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - name: Compilar y ejecutar pruebas Maven
+      - name: Mostrar herramientas
+        run: |
+          java -version
+          mvn -version
+      - name: Compilar y ejecutar pruebas
         run: mvn -B --no-transfer-progress clean verify
-      - name: Validar contratos Postman y migraciones
+      - name: Validar contratos y migraciones
         run: python3 scripts/validate-project.py
 
   build-push:
     needs: verify
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
+      fail-fast: false
       matrix:
         service: [api-gateway, auth-service, user-service, product-service, payment-service]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - name: Autenticación GitHub Container Registry
+      - name: Iniciar sesión en GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Normalizar propietario GHCR
+      - name: Normalizar propietario de GHCR
         id: meta
         shell: bash
         run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-      - name: Publicar imagen SHA y main
+      - name: Construir y publicar imagen
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -62,24 +73,31 @@ jobs:
     runs-on: [self-hosted, Windows, X64, docker-desktop]
     permissions:
       contents: read
-      packages: read
-    timeout-minutes: 30
+    timeout-minutes: 75
     steps:
       - name: Obtener scripts de despliegue
         uses: actions/checkout@v4
-      - name: Comprobar conectividad con Kubernetes
+      - name: Verificar PowerShell y acceso a Kubernetes
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $PSVersionTable.PSVersion.ToString()
           kubectl config current-context
+          if ($LASTEXITCODE -ne 0) { throw 'No se encontró un contexto Kubernetes' }
           kubectl get nodes
-          if ($LASTEXITCODE -ne 0) { throw 'No hay acceso al clúster Kubernetes' }
-      - name: Actualizar imágenes GHCR en Docker Desktop Kubernetes
+          if ($LASTEXITCODE -ne 0) { throw 'El runner no tiene acceso al clúster' }
+          kubectl -n proyecto-03 get deployment
+          if ($LASTEXITCODE -ne 0) { throw 'Faltan los Deployments; ejecute primero k8s-setup.sh' }
+      - name: Actualizar imágenes GHCR
         shell: pwsh
         env:
           IMAGE_OWNER: ${{ github.repository_owner }}
           IMAGE_SHA: ${{ github.sha }}
+          AUTO_ROLLBACK: 'false'
+          # Si los paquetes GHCR son privados, configure imagePullSecrets previamente.
+          GHCR_PRIVATE: 'false'
         run: ./scripts/deploy-local.ps1
-      - name: Resumen del despliegue
+      - name: Resumen final de Kubernetes
         if: always()
         shell: pwsh
         run: |
