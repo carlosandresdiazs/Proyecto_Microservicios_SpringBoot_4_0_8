@@ -6,15 +6,22 @@
   No altera las bases de datos ni flyway_schema_history. Devuelve exit code 1 si
   existen errores de acceso, migraciones aplicadas incompatibles o archivos faltantes.
   Las migraciones nuevas sin aplicar se muestran como PENDIENTE.
+  No puede reparar checksums historicos cambiando unicamente este script.
+  Para una V1 aplicada, restaurar el SQL original con su checksum real o
+  revisar el esquema y un procedimiento controlado de Flyway repair.
 .EXAMPLE
   pwsh -File scripts/check-flyway-history.ps1
 .EXAMPLE
   pwsh -File scripts/check-flyway-history.ps1 -Namespace proyecto-03
+.EXAMPLE
+  pwsh -File scripts/check-flyway-history.ps1 -HistoricalSqlDirectory ./backups/flyway-originals
 #>
 [CmdletBinding()]
 param(
     [ValidateNotNullOrEmpty()]
-    [string]$Namespace = 'proyecto-03'
+    [string]$Namespace = 'proyecto-03',
+    # Carpeta opcional con copias historicas de los SQL (solo lectura).
+    [string]$HistoricalSqlDirectory = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +69,35 @@ function Get-FlywayVersionKey {
 $errors = [System.Collections.Generic.List[string]]::new()
 $pendingCount = 0
 $okCount = 0
+
+# Estos son los checksums de V1 observados en PostgreSQL el 18-11-2026.
+# Se utilizan exclusivamente para DIAGNOSTICO; nunca sustituyen el valor de
+# flyway_schema_history ni hacen que una migracion incompatible se acepte.
+$observedDatabaseV1 = @{
+    'auth-service'    = '2064439196'
+    'user-service'    = '857576180'
+    'product-service' = '-801722433'
+    'payment-service' = '-1020418344'
+}
+
+function Find-HistoricalSqlMatch {
+    param(
+        [Parameter(Mandatory)][string]$Service,
+        [Parameter(Mandatory)][string]$ExpectedChecksum,
+        [Parameter(Mandatory)][string]$ExpectedScript
+    )
+    if ([string]::IsNullOrWhiteSpace($HistoricalSqlDirectory)) { return }
+    $folder = Join-Path $HistoricalSqlDirectory $Service
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { return }
+    foreach ($candidate in Get-ChildItem -LiteralPath $folder -File -Filter '*.sql' -Recurse) {
+        if ($candidate.Name -cne $ExpectedScript) { continue }
+        $crc = [string](Get-FlywayChecksum -Path $candidate.FullName)
+        if ($crc -ceq $ExpectedChecksum) {
+            Write-Host "  COINCIDENCIA HISTORICA: $($candidate.FullName) (checksum=$crc)" -ForegroundColor Green
+            Write-Host "  Revise y restaure este SQL original mediante Git; no modifique la base de datos automaticamente." -ForegroundColor Yellow
+        }
+    }
+}
 
 if (-not (Get-Command kubectl -ErrorAction SilentlyContinue)) {
     Write-Error 'No se encontro kubectl en PATH.' -ErrorAction Continue
@@ -154,6 +190,14 @@ foreach ($item in $databaseInfo) {
             $okCount++
         } else {
             $errors.Add("$service V${version}: difiere $($differences -join ', '). DB=[$($saved.Script), $($saved.Description), $($saved.Checksum), success=$($saved.Success)] REPO=[$($current.Script), $($current.Description), $($current.Checksum)]")
+            if ($version -eq '1') {
+                Write-Host "  HISTORIAL REAL $service`: checksum V1 = $($saved.Checksum)" -ForegroundColor Yellow
+                Write-Host "  ARCHIVO ACTUAL $service`: checksum V1 = $($current.Checksum)" -ForegroundColor Yellow
+                if ($observedDatabaseV1.ContainsKey($service) -and $saved.Checksum -cne $observedDatabaseV1[$service]) {
+                    Write-Host "  AVISO: checksum DB distinto del observado anteriormente ($($observedDatabaseV1[$service])). Revisar si cambio el entorno o se ejecuto repair." -ForegroundColor Yellow
+                }
+                Find-HistoricalSqlMatch -Service $service -ExpectedChecksum $saved.Checksum -ExpectedScript $saved.Script
+            }
         }
     }
     foreach ($version in $history.Keys) {
