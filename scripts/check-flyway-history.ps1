@@ -38,7 +38,7 @@ function Get-FlywayChecksum {
                 $crc = $crc -bxor [uint32]$b
                 for ($i = 0; $i -lt 8; $i++) {
                     if (($crc -band [uint32]1) -ne 0) {
-                        $crc = ($crc -shr 1) -bxor [uint32]0xEDB88320
+                        $crc = ($crc -shr 1) -bxor [uint32]3988292384
                     } else {
                         $crc = $crc -shr 1
                     }
