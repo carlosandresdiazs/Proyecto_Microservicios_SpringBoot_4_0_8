@@ -62,8 +62,14 @@ jobs:
     runs-on: [self-hosted, Windows, X64, docker-desktop]
     permissions:
       contents: read
-      packages: write
+      packages: read
     steps:
+      - name: Autenticación en GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+         registry: ghcr.io
+         username: ${{ github.actor }}
+         password: ${{ secrets.GITHUB_TOKEN }}
       - name: Desplegar las imágenes en Kubernetes de Docker Desktop
         shell: powershell
         env:
@@ -74,9 +80,6 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           if ((kubectl config current-context).Trim() -ne 'docker-desktop') { throw 'El runner no está conectado a docker-desktop' }
-          $token = $env:GH_TOKEN
-          $token | docker login ghcr.io -u $env:GH_ACTOR --password-stdin
-          if ($LASTEXITCODE -ne 0) { throw 'Falló docker login' }
           $ns = 'proyecto-03'
           kubectl -n $ns get secret app-secrets rsa-keys keycloak-realm
           if ($LASTEXITCODE -ne 0) { throw 'Falta configuración inicial: ejecuta scripts/k8s-setup.sh manualmente' }
