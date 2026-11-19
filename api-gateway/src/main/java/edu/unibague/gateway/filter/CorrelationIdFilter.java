@@ -19,7 +19,7 @@ public class CorrelationIdFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String correlationId = exchange.getRequest().getHeaders().getFirst(HEADER_NAME);
-        if (correlationId == null || correlationId.isBlank()) {
+        if (correlationId == null || !correlationId.matches("[A-Za-z0-9._-]{1,64}")) {
             correlationId = UUID.randomUUID().toString();
         }
 
