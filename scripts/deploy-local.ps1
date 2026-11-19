@@ -53,27 +53,27 @@ $context = (& kubectl config current-context)
 if ($LASTEXITCODE -ne 0 -or ($context.Trim() -ne 'docker-desktop')) {
     throw "El contexto del runner debe ser docker-desktop. Detectado: $context"
 }
-Invoke-Kubectl @('get', 'namespace', $namespace)
+Invoke-Kubectl -Arguments @('get', 'namespace', $namespace)
 foreach ($secret in @('app-secrets', 'rsa-keys', 'keycloak-realm')) {
-    Invoke-Kubectl @('-n', $namespace, 'get', 'secret', $secret, '-o', 'name')
+    Invoke-Kubectl -Arguments @('-n', $namespace, 'get', 'secret', $secret, '-o', 'name')
 }
 foreach ($service in $services) {
-    Invoke-Kubectl @('-n', $namespace, 'get', 'deployment', $service, '-o', 'name')
+    Invoke-Kubectl -Arguments @('-n', $namespace, 'get', 'deployment', $service, '-o', 'name')
 }
 # No avanzar si PostgreSQL no esta listo; el rollout no corrige problemas de DB.
 foreach ($db in @('auth-db','users-db','products-db','payments-db')) {
-    Invoke-Kubectl @('-n', $namespace, 'rollout', 'status', "deployment/$db", '--timeout=180s')
+    Invoke-Kubectl -Arguments @('-n', $namespace, 'rollout', 'status', "deployment/$db", '--timeout=180s')
 }
 # Comprobar metadatos reales Flyway contra las migraciones incluidas en este commit.
 $flywayCheck = Join-Path $PSScriptRoot 'check-flyway-history.ps1'
 if (-not (Test-Path -LiteralPath $flywayCheck)) { throw 'Falta scripts/check-flyway-history.ps1' }
 & $flywayCheck
-if (-not $?) { throw 'Preflight Flyway fallido.' }
+if ($LASTEXITCODE -ne 0) { throw "Preflight Flyway fallido (exit=$LASTEXITCODE)." }
 
 # Las imágenes privadas requieren un imagePullSecret ya vinculado al Pod o
 # a su ServiceAccount. No creamos ni imprimimos tokens desde Actions.
 if ($env:GHCR_PRIVATE -eq 'true') {
-    Invoke-Kubectl @('-n', $namespace, 'get', 'secret', 'ghcr-pull-secret', '-o', 'name')
+    Invoke-Kubectl -Arguments @('-n', $namespace, 'get', 'secret', 'ghcr-pull-secret', '-o', 'name')
     Write-Host 'GHCR privado: confirme que el Deployment o ServiceAccount usa ghcr-pull-secret.'
 }
 
@@ -90,14 +90,14 @@ try {
             Write-Host "Actualizando $service -> $image"
             # Una sola mutación del Pod template: evita revisiones innecesarias.
             # El SHA es único, por lo que IfNotPresent es suficiente.
-            Invoke-Kubectl @('-n', $namespace, 'set', 'image', $deployment, "app=$image")
+            Invoke-Kubectl -Arguments @('-n', $namespace, 'set', 'image', $deployment, "app=$image")
             $updated.Add($service)
         }
-        Invoke-Kubectl @('-n', $namespace, 'rollout', 'status', $deployment, '--timeout=600s')
-        Invoke-Kubectl @('-n', $namespace, 'get', 'deployment', $service, '-o', 'wide')
+        Invoke-Kubectl -Arguments @('-n', $namespace, 'rollout', 'status', $deployment, '--timeout=600s')
+        Invoke-Kubectl -Arguments @('-n', $namespace, 'get', 'deployment', $service, '-o', 'wide')
     }
     Write-Host 'Despliegue de los cinco microservicios completado.'
-    Invoke-Kubectl @('-n', $namespace, 'get', 'deployments', '-o', 'wide')
+    Invoke-Kubectl -Arguments @('-n', $namespace, 'get', 'deployments', '-o', 'wide')
 } catch {
     $reason = $_
     Write-Warning "Falló deploy-local en $failedService : $reason"
